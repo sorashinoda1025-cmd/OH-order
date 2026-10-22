@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#172554">
+<title>文化祭オーダーシステム</title>
+<style>
+:root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#172033;background:#f3f5f9}
+*{box-sizing:border-box}body{margin:0}header{background:#172554;color:white;padding:16px max(16px,calc((100vw - 1100px)/2));display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-size:1.2rem;margin:0}main{max-width:1100px;margin:0 auto;padding:16px}button,input,select{font:inherit}button{border:0;border-radius:10px;padding:10px 13px;cursor:pointer;font-weight:650;background:#1d4ed8;color:white}button:disabled{opacity:.45;cursor:not-allowed}.secondary{background:#e2e8f0;color:#172033}.danger{background:#b91c1c}.success{background:#15803d}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}.tabs button{background:#dbe3f2;color:#172033}.tabs button.active{background:#1d4ed8;color:white}.panel{background:white;border:1px solid #e1e6ef;border-radius:16px;padding:16px;margin-bottom:16px;box-shadow:0 2px 7px #0f172a08}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}.products{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:10px}.product{border:1px solid #dbe3f0;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}.product button{width:100%}.price{font-size:1.05rem;font-weight:750}.muted{color:#64748b;font-size:.9rem}.row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.order{border:1px solid #dbe3f0;border-radius:13px;padding:14px;margin-top:10px}.order h3{margin:0;font-size:1.15rem}.order ul{padding-left:20px;margin:8px 0}.status{display:inline-block;border-radius:99px;background:#e2e8f0;padding:4px 9px;font-size:.82rem;font-weight:700}.s0{background:#fef3c7;color:#92400e}.s1{background:#dbeafe;color:#1e40af}.s2{background:#dcfce7;color:#166534}.qty{display:flex;align-items:center;gap:8px}.qty button{padding:4px 10px}.total{font-size:1.25rem;font-weight:800}.field{display:flex;flex-direction:column;gap:5px;margin:10px 0}.field input,.field select{padding:10px;border:1px solid #cbd5e1;border-radius:9px;width:100%}.notice{padding:12px;border-radius:10px;background:#eff6ff;color:#1e40af;margin:10px 0}.error{background:#fef2f2;color:#991b1b}.hidden{display:none!important}.small{font-size:.85rem}.empty{text-align:center;color:#64748b;padding:24px}.stat{font-size:1.7rem;font-weight:800}.tag{font-size:.8rem;padding:4px 8px;background:#e2e8f0;border-radius:8px}
+@media(min-width:760px){.layout{display:grid;grid-template-columns:1.1fr .9fr;gap:16px;align-items:start}}
+</style>
+</head>
+<body>
+<header><h1>🏮 文化祭オーダーシステム</h1><div class="row"><span id="connection" class="tag">未接続</span><button id="settingsBtn" class="secondary">接続設定</button></div></header>
+<main>
+<div id="setupWarning" class="notice">最初に「接続設定」からFirebaseを設定してください。設定後、受付端末と調理端末で同じ設定・店舗コードを使用します。</div>
+<div class="panel">
+ <div class="row"><div><div class="muted">店舗コード（受付と調理で同じコード）</div><strong id="stallLabel">未設定</strong></div><div class="muted" id="syncLabel">同期状態：未接続</div></div>
+</div>
+<nav class="tabs">
+ <button data-tab="register" class="active">注文受付</button><button data-tab="kitchen">調理管理</button><button data-tab="sales">売上・集計</button>
+</nav>
+<section id="register">
+ <div class="layout">
+  <div class="panel"><h2>商品を選ぶ</h2><p class="muted">商品をタップして注文に追加します。</p><div id="productList" class="products"><div class="empty">メニューを読み込み中…</div></div></div>
+  <div class="panel"><div class="row"><h2>今回の注文</h2><button id="clearCart" class="secondary">クリア</button></div><div id="cart"><div class="empty">商品を選択してください</div></div><div class="row" style="margin-top:14px"><span>合計</span><span class="total" id="cartTotal">¥0</span></div><div class="field"><label for="note">メモ（任意）</label><input id="note" placeholder="例：ソース別添え"></div><button id="submitOrder" style="width:100%;padding:14px">注文を確定する</button><p class="muted small">確定後に注文番号が発行され、調理画面に共有されます。</p></div>
+ </div>
+</section>
+<section id="kitchen" class="hidden">
+ <div class="panel"><div class="row"><div><h2>調理・受け渡し管理</h2><p class="muted">受付端末で登録した注文が自動で表示されます。</p></div><select id="kitchenFilter" aria-label="注文の絞り込み"><option value="active">未提供のみ</option><option value="all">すべて</option><option value="受付済み">受付済み</option><option value="調理中">調理中</option><option value="提供完了">提供完了</option></select></div><div id="kitchenOrders"></div></div>
+</section>
+<section id="sales" class="hidden">
+ <div class="grid">
+  <div class="panel"><div class="muted">注文数</div><div class="stat" id="salesCount">0</div></div>
+  <div class="panel"><div class="muted">売上合計（注文総額）</div><div class="stat" id="salesTotal">¥0</div></div>
+  <div class="panel"><div class="muted">未提供の注文</div><div class="stat" id="salesActive">0</div></div>
+ </div>
+ <div class="panel"><h2>商品別販売数</h2><div id="salesProducts" class="muted">注文データがありません。</div><p class="muted small">この集計は登録済み注文の合計です。支払い済みかどうかを別に管理する機能はまだありません。</p></div>
+ <div class="panel"><h2>メニュー設定</h2><p class="muted">商品名と価格を追加できます。変更は同じ店舗コードの全端末に反映されます。</p>
+  <div class="grid"><div class="field"><label for="newName">商品名</label><input id="newName" placeholder="例：焼きそば"></div><div class="field"><label for="newPrice">価格（円）</label><input id="newPrice" type="number" min="0" step="1" placeholder="500"></div></div>
+  <button id="addProduct">商品を追加</button><div id="manageMenu"></div>
+ </div>
+</section>
+</main>
+<dialog id="settingsDialog" style="border:0;border-radius:16px;padding:20px;width:min(560px,calc(100% - 24px));box-shadow:0 20px 60px #0003">
+ <form id="settingsForm"><div class="row"><h2>Firebase接続設定</h2><button type="button" id="closeSettings" class="secondary">閉じる</button></div>
+ <p class="muted">FirebaseプロジェクトのWebアプリ設定値を入力してください。入力値はこの端末のブラウザ内に保存されます。</p>
+ <div class="field"><label>apiKey</label><input name="apiKey" required></div>
+ <div class="field"><label>authDomain</label><input name="authDomain" required></div>
+ <div class="field"><label>databaseURL</label><input name="databaseURL" required placeholder="https://プロジェクト-default-rtdb.firebaseio.com"></div>
+ <div class="field"><label>projectId</label><input name="projectId" required></div>
+ <div class="field"><label>appId</label><input name="appId" required></div>
+ <div class="field"><label>店舗コード（全端末で同じもの）</label><input name="stallCode" required value="class-festival-01" maxlength="40" pattern="[A-Za-z0-9_-]+"></div>
+ <div class="notice small">Firebase ConsoleでAuthenticationの匿名ログインを有効化し、Realtime Databaseを作成してください。安全ルールは同梱READMEの例を設定します。</div>
+ <button type="submit" style="width:100%">保存して接続</button><div id="settingsError" class="notice error hidden"></div>
+ </form>
+</dialog>
+<div id="toast" style="position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#172033;color:white;padding:12px 16px;border-radius:10px;display:none;max-width:90%;z-index:5"></div>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js";
+import { getDatabase, ref, onValue, push, set, update, get } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-database.js";
+
+const $=id=>document.getElementById(id);
+const statusNames=["受付済み","調理中","提供完了"];
+let app,auth,db,rootRef,ordersRef,menuRef,unsubOrders=null,unsubMenu=null;
+let orders={},menu={},cart={},config=null,connected=false;
+const yen=n=>"¥"+Number(n||0).toLocaleString("ja-JP");
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function toast(msg){$("toast").textContent=msg;$("toast").style.display="block";setTimeout(()=>$("toast").style.display="none",2600)}
+function setConnection(ok,msg){connected=ok;$("connection").textContent=msg;$("connection").style.background=ok?"#dcfce7":"#fee2e2";$("syncLabel").textContent="同期状態："+msg;$("setupWarning").classList.toggle("hidden",ok)}
+function readConfig(){try{return JSON.parse(localStorage.getItem("festivalOrderConfig")||"null")}catch{return null}}
+function saveConfig(c){localStorage.setItem("festivalOrderConfig",JSON.stringify(c))}
+function stopListeners(){if(unsubOrders)unsubOrders();if(unsubMenu)unsubMenu();unsubOrders=unsubMenu=null}
+async function connect(c){
+ stopListeners();config=c;$("stallLabel").textContent=c.stallCode;
+ try{
+  app=initializeApp({apiKey:c.apiKey,authDomain:c.authDomain,databaseURL:c.databaseURL,projectId:c.projectId,appId:c.appId},"festival-"+c.stallCode+"-"+Math.random().toString(36).slice(2));
+  auth=getAuth(app);await signInAnonymously(auth);db=getDatabase(app);
+  rootRef=ref(db,"festivalOrders/"+c.stallCode);ordersRef=ref(db,"festivalOrders/"+c.stallCode+"/orders");menuRef=ref(db,"festivalOrders/"+c.stallCode+"/menu");
+  const snap=await get(menuRef);
+  if(!snap.exists()) await set(menuRef,{"yakisoba":{name:"焼きそば",price:500,active:true},"drink":{name:"ジュース",price:200,active:true}});
+  unsubOrders=onValue(ordersRef,s=>{orders=s.val()||{};renderKitchen();renderSales()},e=>{setConnection(false,"同期エラー");toast("注文データを読み込めません。Databaseルールを確認してください。")});
+  unsubMenu=onValue(menuRef,s=>{menu=s.val()||{};renderProducts();renderMenuManager()},e=>toast("メニューを読み込めません"));
+  setConnection(true,"接続中");toast("Firebaseに接続しました");
+ }catch(e){console.error(e);setConnection(false,"接続失敗");$("settingsError").textContent="接続に失敗しました："+(e?.message||e);$("settingsError").classList.remove("hidden");$("settingsDialog").showModal()}
+}
+function activeMenu(){return Object.entries(menu).filter(([,p])=>p&&p.active!==false).sort((a,b)=>a[1].name.localeCompare(b[1].name,"ja"))}
+function renderProducts(){
+ const items=activeMenu();$("productList").innerHTML=items.length?items.map(([id,p])=>`<div class="product"><strong>${esc(p.name)}</strong><div class="price">${yen(p.price)}</div><button data-add="${esc(id)}">追加</button></div>`).join(""):'<div class="empty">商品がありません。「売上・集計」から追加してください。</div>';
+ document.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{let id=b.dataset.add;cart[id]=(cart[id]||0)+1;renderCart()});
+}
+function renderCart(){
+ let items=Object.entries(cart).filter(([id,q])=>q>0&&menu[id]);let total=items.reduce((s,[id,q])=>s+Number(menu[id].price)*q,0);
+ $("cart").innerHTML=items.length?items.map(([id,q])=>`<div class="row" style="padding:8px 0;border-bottom:1px solid #e2e8f0"><div><strong>${esc(menu[id].name)}</strong><div class="muted">${yen(menu[id].price)} × ${q}</div></div><div class="qty"><button class="secondary" data-minus="${esc(id)}">−</button><strong>${q}</strong><button data-plus="${esc(id)}">＋</button></div></div>`).join(""):'<div class="empty">商品を選択してください</div>';
+ $("cartTotal").textContent=yen(total);
+ document.querySelectorAll("[data-minus]").forEach(b=>b.onclick=()=>{let id=b.dataset.minus;cart[id]--;if(cart[id]<=0)delete cart[id];renderCart()});
+ document.querySelectorAll("[data-plus]").forEach(b=>b.onclick=()=>{let id=b.dataset.plus;cart[id]++;renderCart()});
+ $("submitOrder").disabled=!connected||!items.length;
+}
+$("clearCart").onclick=()=>{cart={};renderCart()};
+$("submitOrder").onclick=async()=>{
+ if(!connected)return toast("先にFirebaseへ接続してください");
+ const items=Object.entries(cart).filter(([id,q])=>q>0&&menu[id]).map(([id,q])=>({productId:id,name:menu[id].name,price:Number(menu[id].price),quantity:q}));
+ if(!items.length)return;
+ const total=items.reduce((s,i)=>s+i.price*i.quantity,0);
+ $("submitOrder").disabled=true;
+ try{
+  const newRef=push(ordersRef);
+  const record={orderNo:Date.now().toString().slice(-6),items,total,note:$("note").value.trim(),status:"受付済み",createdAt:Date.now()};
+  await set(newRef,record);cart={};$("note").value="";renderCart();toast("注文を登録しました：No. "+record.orderNo);
+ }catch(e){toast("注文を登録できませんでした。通信状況を確認してください");console.error(e)}
+ finally{$("submitOrder").disabled=false}
+};
+function orderCard(key,o){
+ let items=(o.items||[]).map(i=>`<li>${esc(i.name)} × ${Number(i.quantity)} <span class="muted">(${yen(i.price)} × ${Number(i.quantity)})</span></li>`).join("");
+ let index=statusNames.indexOf(o.status);if(index<0)index=0;
+ let next=index<2?statusNames[index+1]:null;
+ return `<article class="order"><div class="row"><h3>No. ${esc(o.orderNo||"------")}</h3><span class="status s${index}">${esc(o.status||"受付済み")}</span></div><ul>${items}</ul>${o.note?`<div class="notice small">メモ：${esc(o.note)}</div>`:""}<div class="row"><strong>${yen(o.total)}</strong><span class="muted small">${o.createdAt?new Date(o.createdAt).toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"}):""}</span></div><div class="row" style="margin-top:10px">${next?`<button data-next="${esc(key)}">${next==="調理中"?"調理開始":"提供完了にする"}</button>`:`<span class="muted">この注文は完了しています</span>`}<button class="secondary" data-revert="${esc(key)}" ${index===0?"disabled":""}>一つ戻す</button></div></article>`;
+}
+function renderKitchen(){
+ let list=Object.entries(orders).sort((a,b)=>(a[1].createdAt||0)-(b[1].createdAt||0));
+ let f=$("kitchenFilter").value;
+ if(f==="active")list=list.filter(([,o])=>o.status!=="提供完了");else if(f!=="all")list=list.filter(([,o])=>o.status===f);
+ $("kitchenOrders").innerHTML=list.length?list.map(([k,o])=>orderCard(k,o)).join(""):'<div class="empty">表示する注文はありません。</div>';
+ document.querySelectorAll("[data-next]").forEach(b=>b.onclick=()=>changeStatus(b.dataset.next,1));
+ document.querySelectorAll("[data-revert]").forEach(b=>b.onclick=()=>changeStatus(b.dataset.revert,-1));
+}
+async function changeStatus(key,delta){
+ let o=orders[key];if(!o||!connected)return;
+ let i=statusNames.indexOf(o.status);let next=statusNames[Math.max(0,Math.min(2,i+delta))];
+ try{await update(ref(db,`festivalOrders/${config.stallCode}/orders/${key}`),{status:next,updatedAt:Date.now()})}catch(e){toast("状態を更新できませんでした");console.error(e)}
+}
+$("kitchenFilter").onchange=renderKitchen;
+function renderSales(){
+ const list=Object.values(orders);$("salesCount").textContent=list.length;$("salesTotal").textContent=yen(list.reduce((s,o)=>s+Number(o.total||0),0));$("salesActive").textContent=list.filter(o=>o.status!=="提供完了").length;
+ const counts={};list.forEach(o=>(o.items||[]).forEach(i=>counts[i.name]=(counts[i.name]||0)+Number(i.quantity||0)));
+ $("salesProducts").innerHTML=Object.keys(counts).length?Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([n,q])=>`<div class="row" style="padding:9px 0;border-bottom:1px solid #e2e8f0"><span>${esc(n)}</span><strong>${q}個</strong></div>`).join(""):'注文データがありません。';
+}
+async function addProduct(){
+ const name=$("newName").value.trim(),price=Number($("newPrice").value);
+ if(!connected)return toast("先に接続してください");
+ if(!name||$("newPrice").value===""||!Number.isFinite(price)||price<0)return toast("商品名と0以上の価格を入力してください");
+ const id="p_"+Date.now().toString(36);
+ try{await set(ref(db,`festivalOrders/${config.stallCode}/menu/${id}`),{name,price,active:true});$("newName").value="";$("newPrice").value="";toast("商品を追加しました")}catch(e){toast("商品を追加できませんでした")}
+}
+$("addProduct").onclick=addProduct;
+function renderMenuManager(){
+ $("manageMenu").innerHTML=activeMenu().map(([id,p])=>`<div class="row" style="padding:9px 0;border-bottom:1px solid #e2e8f0"><span>${esc(p.name)} <span class="muted">${yen(p.price)}</span></span><button class="danger small" data-disable="${esc(id)}">販売停止</button></div>`).join("")||'<p class="muted">商品なし</p>';
+ document.querySelectorAll("[data-disable]").forEach(b=>b.onclick=async()=>{if(confirm("この商品を販売停止にしますか？"))await update(ref(db,`festivalOrders/${config.stallCode}/menu/${b.dataset.disable}`),{active:false})});
+}
+document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{document.querySelectorAll("[data-tab]").forEach(x=>x.classList.toggle("active",x===b));["register","kitchen","sales"].forEach(id=>$(id).classList.toggle("hidden",id!==b.dataset.tab));if(b.dataset.tab==="register")renderCart()});
+$("settingsBtn").onclick=()=>{$("settingsError").classList.add("hidden");let c=readConfig();if(c)for(let [k,v] of Object.entries(c)){let el=$("settingsForm").elements[k];if(el)el.value=v}$("settingsDialog").showModal()};
+$("closeSettings").onclick=()=>$("settingsDialog").close();
+$("settingsForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.currentTarget);let c=Object.fromEntries(["apiKey","authDomain","databaseURL","projectId","appId","stallCode"].map(k=>[k,String(f.get(k)||"").trim()]));if(!/^https:\/\//.test(c.databaseURL)){$("settingsError").textContent="databaseURLはhttps://から入力してください";$("settingsError").classList.remove("hidden");return}saveConfig(c);await connect(c);if(connected)$("settingsDialog").close()};
+const prior=readConfig();if(prior){for(let [k,v] of Object.entries(prior)){let el=$("settingsForm").elements[k];if(el)el.value=v}connect(prior)}else{renderCart();renderKitchen();renderSales();$("settingsDialog").showModal()}
+</script>
+</body>
+</html>
